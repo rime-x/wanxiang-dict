@@ -10,12 +10,17 @@ jobs:
   update-chars:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout (including submodules)
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           persist-credentials: true
           fetch-depth: 0
-          submodules: 'recursive'
+
+      - name: Init submodules (shallow)
+        run: |
+          # sync and init submodules with depth=1 to reduce clone size
+          git submodule sync --recursive
+          git submodule update --init --recursive --depth 1
 
       - name: Set up Python
         uses: actions/setup-python@v4
