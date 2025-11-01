@@ -4,7 +4,7 @@ on:
   workflow_dispatch: {}
   push:
     branches:
-      - main
+      - dict
 
 jobs:
   update-chars:
@@ -25,19 +25,24 @@ jobs:
         run: |
           python scripts/add_auxcodes.py --moqi fuzhuma/moqi/moqima_41448.txt --dir dicts/wanxiang/dicts --out-dir auxified/moqi --dry-run
 
-      - name: Apply changes and commit outputs (manual or main branch)
-        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+      - name: Apply changes and push to main (when run on dict branch or manual)
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/dict'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -e
+          set -euo pipefail
           python scripts/add_auxcodes.py --moqi fuzhuma/moqi/moqima_41448.txt --dir dicts/wanxiang/dicts --out-dir auxified/moqi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add auxified || true
+          # Fetch latest main and switch to it
+          git fetch origin main --depth=1
+          git checkout -B main origin/main
+          # Ensure generated outputs are present in the working tree and add them
+          git add auxified/moqi || true
           if ! git diff --cached --quiet; then
             git commit -m "chore: add auxiliary codes to dictionaries (from moqima_41448.txt)"
-            git push
+            # Push to main
+            git push origin main
           else
             echo "No changes to commit"
           fi
