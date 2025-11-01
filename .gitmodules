@@ -1,0 +1,6 @@
+[submodule "dicts/wanxiang"]
+	path = dicts/wanxiang
+	url = https://github.com/amzxyz/rime_wanxiang
+[submodule "fuzhuma/moqi"]
+	path = fuzhuma/moqi
+	url = https://github.com/gaboolic/moqima-tables

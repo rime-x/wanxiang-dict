@@ -1,0 +1,43 @@
+name: Add auxiliary codes to dict.yaml
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - main
+
+jobs:
+  update-chars:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Dry-run (show planned changes for folder)
+        run: |
+          python scripts/add_auxcodes.py --moqi fuzhuma/moqi/moqima_41448.txt --dir dicts/wanxiang/dicts --out-dir auxified/moqi --dry-run
+
+      - name: Apply changes and commit outputs (manual or main branch)
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          python scripts/add_auxcodes.py --moqi fuzhuma/moqi/moqima_41448.txt --dir dicts/wanxiang/dicts --out-dir auxified/moqi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add auxified || true
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: add auxiliary codes to dictionaries (from moqima_41448.txt)"
+            git push
+          else
+            echo "No changes to commit"
+          fi
