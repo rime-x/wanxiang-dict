@@ -26,24 +26,31 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-      - name: Apply changes and push to main (when run on dict branch or manual)
+      - name: Generate outputs and push to main (when run on dict branch or manual)
         if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/dict'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          python scripts/add_auxcodes.py --moqi fuzhuma/moqi/moqima_41448.txt --dir dicts/wanxiang/dicts --out-dir auxified/moqi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # Fetch latest main and switch to it
+
+          # Remove any previous generated outputs to avoid checkout conflicts
+          rm -rf auxified/moqi || true
+
+          # Fetch latest main and switch working tree to it
           git fetch origin main --depth=1
           git checkout -B main origin/main
-          # Ensure generated outputs are present in the working tree and add them
+
+          # Run the generator on main branch
+          python scripts/add_auxcodes.py --moqi fuzhuma/moqi/moqima_41448.txt --dir dicts/wanxiang/dicts --out-dir auxified/moqi
+
+          # Add and commit only if there are changes
           git add auxified/moqi || true
-          if ! git diff --cached --quiet; then
-            git commit -m "chore: add auxiliary codes to dictionaries (from moqima_41448.txt)"
-            # Push to main
-            git push origin main
-          else
+          if git diff --cached --quiet; then
             echo "No changes to commit"
+            exit 0
           fi
+
+          git commit -m "chore: add auxiliary codes to dictionaries (from moqima_41448.txt)"
+          git push origin main
