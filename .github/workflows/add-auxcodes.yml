@@ -10,11 +10,12 @@ jobs:
   update-chars:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout (including submodules)
         uses: actions/checkout@v4
         with:
           persist-credentials: true
           fetch-depth: 0
+          submodules: 'recursive'
 
       - name: Set up Python
         uses: actions/setup-python@v4
