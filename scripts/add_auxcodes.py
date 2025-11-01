@@ -41,10 +41,16 @@ def load_moqi(path: Path) -> dict[str, str]:
     return mapping
 
 
-def process_chars(chars_path: Path, moqi_map: dict[str, str]) -> tuple[list[str], int]:
+def process_chars(chars_path: Path, moqi_map: dict[str, str]) -> tuple[list[str], int, int]:
+    """Process a chars.dict-like file.
+
+    Returns: (out_lines, changed_count, candidate_count)
+    candidate_count counts lines that look like <key>\t<pinyin>\t<...> and were eligible for mapping.
+    """
     lines = chars_path.read_text(encoding="utf-8").splitlines(keepends=True)
     out_lines: list[str] = []
     changed = 0
+    candidates = 0
     for line in lines:
         if line.strip() == "":
             out_lines.append(line)
@@ -54,21 +60,85 @@ def process_chars(chars_path: Path, moqi_map: dict[str, str]) -> tuple[list[str]
             continue
         parts = line.split("\t")
         if len(parts) >= 3:
-            ch = parts[0]
+            candidates += 1
+            key = parts[0]
             pinyin = parts[1]
             rest = "\t".join(parts[2:])
-            aux = moqi_map.get(ch)
-            if aux and ";" not in pinyin:
-                new_pinyin = f"{pinyin};{aux}"
-                new_line = "\t".join([ch, new_pinyin, rest])
-                # Preserve original line ending
+            # Skip if pinyin already contains an aux marker
+            if ";" in pinyin:
+                out_lines.append(line)
+                continue
+
+            # Single-character entry: simple mapping
+            if len(key) == 1:
+                aux = moqi_map.get(key)
+                # Always append a semicolon; if aux exists append it after the semicolon
+                if aux:
+                    new_pinyin = f"{pinyin};{aux}"
+                else:
+                    new_pinyin = f"{pinyin};"
+                new_line = "\t".join([key, new_pinyin, rest])
                 if line.endswith("\n") and not new_line.endswith("\n"):
                     new_line += "\n"
                 out_lines.append(new_line)
                 changed += 1
                 continue
+
+            # Multi-character (phrase) entry: try to map per-syllable
+            sylls = pinyin.split()
+            if len(sylls) == len(key):
+                new_sylls: list[str] = []
+                any_changed = False
+                for ch, syl in zip(key, sylls):
+                    if ";" in syl:
+                        new_sylls.append(syl)
+                        continue
+                    aux = moqi_map.get(ch)
+                    if aux:
+                        new_syl = f"{syl};{aux}"
+                        new_sylls.append(new_syl)
+                        any_changed = True
+                    else:
+                        # Append semicolon to mark empty aux for this syllable
+                        new_sylls.append(syl + ";")
+                        any_changed = True
+                if any_changed:
+                    new_pinyin = " ".join(new_sylls)
+                    new_line = "\t".join([key, new_pinyin, rest])
+                    if line.endswith("\n") and not new_line.endswith("\n"):
+                        new_line += "\n"
+                    out_lines.append(new_line)
+                    changed += 1
+                    continue
+                else:
+                    out_lines.append(line)
+                    continue
+            else:
+                # Cannot align syllables to characters — fall back to composite aux if possible
+                auxes = [moqi_map.get(ch) for ch in key]
+                auxes = [a for a in auxes if a]
+                if auxes:
+                    composite = "+".join(auxes)
+                    new_pinyin = f"{pinyin};{composite}"
+                    new_line = "\t".join([key, new_pinyin, rest])
+                    if line.endswith("\n") and not new_line.endswith("\n"):
+                        new_line += "\n"
+                    out_lines.append(new_line)
+                    changed += 1
+                    # print a small warning into out (caller may be verbose)
+                    # Note: keep output stable; do not raise exceptions
+                    continue
+                else:
+                    # No aux codes available for any character: append a lone semicolon to the pinyin
+                    new_pinyin = f"{pinyin};"
+                    new_line = "\t".join([key, new_pinyin, rest])
+                    if line.endswith("\n") and not new_line.endswith("\n"):
+                        new_line += "\n"
+                    out_lines.append(new_line)
+                    changed += 1
+                    continue
         out_lines.append(line)
-    return out_lines, changed
+    return out_lines, changed, candidates
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -80,6 +150,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--inplace", action="store_true", help="write changes inplace (overwrites originals). Use with care")
     p.add_argument("--backup", action="store_true", help="make a timestamped backup before writing (only when --inplace is used)")
     p.add_argument("--dry-run", action="store_true", help="print unified diff(s) to stdout and do not modify files")
+    p.add_argument("--verbose", action="store_true", help="print per-file statistics (candidates, modified)")
     args = p.parse_args(argv)
 
     moqi_path = Path(args.moqi)
@@ -144,8 +215,11 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as e:
             print(f"Skipping {fp}: could not read ({e})")
             continue
-        out_lines, changed = process_chars(fp, moqi_map)
+        out_lines, changed, candidates = process_chars(fp, moqi_map)
         total_changed += changed
+
+        if args.verbose:
+            print(f"{fp}: total lines={len(orig)}, candidates={candidates}, modified={changed}")
 
         if changed == 0:
             print(f"{fp}: no changes")
