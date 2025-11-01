@@ -26,7 +26,7 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-      - name: Generate outputs and push to main (when run on dict branch or manual)
+      - name: Generate outputs on dict and copy into main (when run on dict branch or manual)
         if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/dict'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -35,15 +35,19 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # Remove any previous generated outputs to avoid checkout conflicts
-          rm -rf auxified/moqi || true
+          # Generate outputs into a temporary directory outside the repo working tree to avoid checkout conflicts
+          TMP_OUT_DIR="${RUNNER_TEMP}/auxified/moqi"
+          mkdir -p "${TMP_OUT_DIR}"
+          python scripts/add_auxcodes.py --moqi fuzhuma/moqi/moqima_41448.txt --dir dicts/wanxiang/dicts --out-dir "${TMP_OUT_DIR}"
 
           # Fetch latest main and switch working tree to it
           git fetch origin main --depth=1
-          git checkout -B main origin/main
+          git checkout --recurse-submodules -B main origin/main
 
-          # Run the generator on main branch
-          python scripts/add_auxcodes.py --moqi fuzhuma/moqi/moqima_41448.txt --dir dicts/wanxiang/dicts --out-dir auxified/moqi
+          # Remove old target and copy generated outputs from temp into repo working tree
+          rm -rf auxified/moqi || true
+          mkdir -p auxified
+          cp -a "${TMP_OUT_DIR}" auxified/ || true
 
           # Add and commit only if there are changes
           git add auxified/moqi || true
