@@ -110,10 +110,23 @@ def main(argv: list[str] | None = None) -> int:
         if not target_dir.exists() or not target_dir.is_dir():
             print(f"directory not found: {target_dir}")
             return 2
-        # collect candidate files (non-recursive)
-        for p in sorted(target_dir.iterdir()):
-            if p.is_file() and (p.name.endswith('.dict.yaml') or p.suffix in ['.yaml', '.txt']):
+        # Only process this explicit set of filenames when directory mode is used
+        allowed_files = [
+            "base.dict.yaml",
+            "chars.dict.yaml",
+            "compatible.dict.yaml",
+            "corrections.dict.yaml",
+            "correlation.dict.yaml",
+            "place.dict.yaml",
+            "poetry.dict.yaml",
+            "suggestion.dict.yaml",
+        ]
+        for name in allowed_files:
+            p = target_dir / name
+            if p.exists() and p.is_file():
                 files_to_process.append(p)
+            else:
+                print(f"Skipping missing file: {p}")
         base_out_dir = Path(args.out_dir) if args.out_dir else Path.cwd() / "auxified"
 
     if not files_to_process:
