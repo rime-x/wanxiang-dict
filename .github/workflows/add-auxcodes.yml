@@ -1,4 +1,4 @@
-name: Add auxiliary codes to dict.yaml
+name: Add moqima to wanxiang-dict
 
 on:
   workflow_dispatch: {}
@@ -7,7 +7,7 @@ on:
       - dict
 
 jobs:
-  update-chars:
+  update-dict:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -26,11 +26,6 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-
-      - name: Dry-run (show planned changes for folder)
-        run: |
-          python scripts/add_auxcodes.py --moqi fuzhuma/moqi/moqima_41448.txt --dir dicts/wanxiang/dicts --out-dir auxified/moqi --dry-run
-
       - name: Apply changes and push to main (when run on dict branch or manual)
         if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/dict'
         env:
